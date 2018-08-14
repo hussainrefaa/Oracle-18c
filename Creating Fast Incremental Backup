@@ -1,0 +1,65 @@
+Step 1: Take level zero backup.
+
+RMAN> BACKUP INCREMENTAL LEVEL 0 DATABASE;
+
+Starting backup at 10-MAY-18
+using channel ORA_DISK_1
+channel ORA_DISK_1: starting incremental level 0 datafile backup set
+channel ORA_DISK_1: specifying datafile(s) in backup set
+input datafile file number=00001 name=/u01/oracle/oradata/mgr/system01.dbf
+input datafile file number=00002 name=/u01/oracle/oradata/mgr/sysaux01.dbf
+input datafile file number=00003 name=/u01/oracle/oradata/mgr/undotbs01.dbf
+input datafile file number=00004 name=/u01/oracle/oradata/mgr/users01.dbf
+channel ORA_DISK_1: starting piece 1 at 10-MAY-18
+channel ORA_DISK_1: finished piece 1 at 10-MAY-18
+piece handle=/u01/oracle/fast_recovery_area/STD_MGR/backupset/2018_05_10/o1_mf_nnnd0_TAG20180510T224813_fh8zqorx_.bkp tag=TAG20180510T224813 comment=NONE
+channel ORA_DISK_1: backup set complete, elapsed time: 00:01:05
+Finished backup at 10-MAY-18
+
+Starting Control File and SPFILE Autobackup at 10-MAY-18
+piece handle=/u01/oracle/fast_recovery_area/STD_MGR/autobackup/2018_05_10/o1_mf_s_975797323_fh8zsonf_.bkp comment=NONE
+Finished Control File and SPFILE Autobackup at 10-MAY-18
+
+RMAN>
+
+Step 2: Do some DML operation on the database.
+
+Step 3: Take increment level 1 backup.
+
+RMAN> backup incremental level 1 database;
+
+Starting backup at 10-MAY-18
+using channel ORA_DISK_1
+channel ORA_DISK_1: starting incremental level 1 datafile backup set
+channel ORA_DISK_1: specifying datafile(s) in backup set
+input datafile file number=00001 name=/u01/oracle/oradata/mgr/system01.dbf
+input datafile file number=00002 name=/u01/oracle/oradata/mgr/sysaux01.dbf
+input datafile file number=00003 name=/u01/oracle/oradata/mgr/undotbs01.dbf
+input datafile file number=00004 name=/u01/oracle/oradata/mgr/users01.dbf
+channel ORA_DISK_1: starting piece 1 at 10-MAY-18
+channel ORA_DISK_1: finished piece 1 at 10-MAY-18
+piece handle=/u01/oracle/fast_recovery_area/STD_MGR/backupset/2018_05_10/o1_mf_nnnd1_TAG20180510T231238_fh916dc0_.bkp tag=TAG20180510T231238 comment=NONE
+channel ORA_DISK_1: backup set complete, elapsed time: 00:00:03
+Finished backup at 10-MAY-18
+
+Starting Control File and SPFILE Autobackup at 10-MAY-18
+piece handle=/u01/oracle/fast_recovery_area/STD_MGR/autobackup/2018_05_10/o1_mf_s_975798818_fh916g29_.bkp comment=NONE
+Finished Control File and SPFILE Autobackup at 10-MAY-18
+
+RMAN>
+
+I have a small database, but we can level zero backup took 35 seconds and level 1 backup has just taken 3 seconds.
+
+Step 4 : Check v$backup_datafile view with used_change_tracking=’YES’
+
+SQL> select file#,avg(blocks),avg(blocks_read/datafile_blocks)*100 as pct_for_backup from v$backup_datafile where used_change_tracking='YES' group by file#;
+
+     FILE# AVG(BLOCKS) PCT_FOR_BACKUP
+---------- ----------- --------------
+	 1	 27075	    32.629523
+	 2	 16519	   32.1580189
+	 4  58.6666667	   12.0833333
+	 3  970.666667	   30.2430556
+
+SQL> 
+
