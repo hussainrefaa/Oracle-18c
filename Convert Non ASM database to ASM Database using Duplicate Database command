@@ -1,0 +1,210 @@
+Step 1 : Check details of Single Instance Database :
+
+
+SQL> select name,open_mode from v$database;
+
+NAME	  OPEN_MODE
+--------- --------------------
+TEST	  READ WRITE
+
+Optionally, we can check size the database, so that we have enough space available to allocate to new database.
+
+
+SQL>  Select DF.TOTAL/1073741824 "DataFile Size GB", LOG.TOTAL/1073741824 "Redo Log Size GB", CONTROL.TOTAL/1073741824 "Control File Size GB", (DF.TOTAL + LOG.TOTAL + CONTROL.TOTAL)/ 1073741824 "Total Size GB" from dual, (select sum(a.bytes) TOTAL from dba_data_files a) DF, (select sum(b.bytes) TOTAL from v$log b) LOG, (select sum((cffsz+1)*cfbsz) TOTAL from x$kcccf c) CONTROL;
+
+DataFile Size GB Redo Log Size GB Control File Size GB Total Size GB
+---------------- ---------------- -------------------- -------------
+      1.28417969       .146484375	    .018157959	  1.44882202
+
+SQL>  Select DF.TOTAL/1073741824 "DataFile Size GB", LOG.TOTAL/1073741824 "Redo Log Size GB", CONTROL.TOTAL/1073741824 "Control File Size GB", (DF.TOTAL + LOG.TOTAL + CONTROL.TOTAL)/ 1073741824 "Total Size GB" from dual, (select sum(a.bytes) TOTAL from dba_data_files a) DF, (select sum(b.bytes) TOTAL from v$log b) LOG, (select sum((cffsz+1)*cfbsz) TOTAL from x$kcccf c) CONTROL;
+
+DataFile Size GB Redo Log Size GB Control File Size GB Total Size GB
+---------------- ---------------- -------------------- -------------
+      1.28417969       .146484375	    .018157959	  1.44882202
+      
+ 
+Step 2 : Create password file for RAC database under $ORACLE_HOME/dbs/ .
+
+[oracle@rac1 ~]$ echo $ORACLE_HOME
+/u01/app/oracle/product/11.2.0/dbhome_1
+[oracle@rac1 ~]$ orapwd file=$ORACLE_HOME/dbs/orapwtestdb password=oracle
+[oracle@rac1 ~]$
+
+Before starting instance create directory required for instance startup
+
+[oracle@rac1 ~]$ mkdir -p /u01/app/oracle/admin/testdb/adump
+[oracle@rac1 ~]$ mkdir -p /u01/app/oracle/admin/testdb/dpdump
+[oracle@rac1 ~]$ mkdir -p /u01/app/oracle/admin/testdb/<strong>b</strong>dump
+[oracle@rac1 ~]$ mkdir -p /u01/app/oracle/admin/testdb/pfile
+
+Step 3 : Create pfile under $ORACLE_HOME/dbs/ directory
+
+
+[oracle@rac1 dbs]$ cat inittestdb.ora 
+# Set the RAC database name
+db_name ="TESTDB"
+instance_name =TESTDB
+control_files ='+DATA'
+db_create_file_dest='+DATA'
+db_create_online_log_dest_1='+DATA'
+log_archive_dest_1='location=+DATA/arc/testdb/'
+log_archive_format='arch_%r_%s_%t.arc'
+*.audit_file_dest='/u01/app/oracle/admin/test/adump'
+
+db_block_size = 8192
+*.open_cursors=300
+*.pga_aggregate_target=131072000
+*.processes=150
+*.remote_login_passwordfile='EXCLUSIVE'
+*.sga_target=393216000
+undo_management =AUTO
+undo_retention =10800
+undo_tablespace =UNDOTBS1
+compatible = 11.2.0.4.0
+
+Step 4: Configure Oracle Listener and tnsnames file
+
+
+[oracle@rac1 admin]$ cat listener.ora 
+SID_LIST_LISTENER =
+(SID_LIST =
+(SID_DESC =
+(GLOBAL_DBNAME = TESTDB)
+(ORACLE_HOME = /u01/app/oracle/11.2.0/dbhome_1)
+(SID_NAME = TESTDB)
+)
+)
+
+create tnsnames.ora entry as follows :
+
+TESTDB =
+(DESCRIPTION =
+(ADDRESS = (PROTOCOL = TCP)(HOST = rac1.localdomain)(PORT = 1521))
+(CONNECT_DATA =
+(SERVER = DEDICATED)
+(SERVICE_NAME = TESTDB)
+)
+)
+
+Step 5: Start database in nomount stage and check connectivity.
+
+[oracle@rac1 orcl]$ export ORACLE_SID=testdb
+[oracle@rac1 orcl]$ sqlplus / as sysdba
+
+SQL*Plus: Release 11.2.0.4.0 Production on Fri Mar 9 23:46:09 2018
+
+Copyright (c) 1982, 2013, Oracle.  All rights reserved.
+
+Connected to an idle instance.
+
+SQL> startup nomount
+ORACLE instance started.
+
+Total System Global Area  392495104 bytes
+Fixed Size		    2253584 bytes
+Variable Size		  125832432 bytes
+Database Buffers	  260046848 bytes
+Redo Buffers		    4362240 bytes
+SQL>
+
+Step 6: Take backup of non-asm database
+
+
+[oracle@sip TEST]$ rman target /
+
+Recovery Manager: Release 11.2.0.4.0 - Production on Sat Mar 10 02:58:00 2018
+
+Copyright (c) 1982, 2011, Oracle and/or its affiliates.  All rights reserved.
+
+connected to target database: TEST (DBID=2268489675)
+
+RMAN> backup database;
+
+Starting backup at 10-MAR-18
+using target database control file instead of recovery catalog
+allocated channel: ORA_DISK_1
+channel ORA_DISK_1: SID=53 device type=DISK
+channel ORA_DISK_1: starting full datafile backup set
+channel ORA_DISK_1: specifying datafile(s) in backup set
+input datafile file number=00001 name=/u01/app/oracle/oradata/test/system01.dbf
+input datafile file number=00002 name=/u01/app/oracle/oradata/test/sysaux01.dbf
+input datafile file number=00003 name=/u01/app/oracle/oradata/test/undotbs01.dbf
+input datafile file number=00004 name=/u01/app/oracle/oradata/test/users01.dbf
+channel ORA_DISK_1: starting piece 1 at 10-MAR-18
+channel ORA_DISK_1: finished piece 1 at 10-MAR-18
+piece handle=/u01/app/oracle/fast_recovery_area/TESTDB/TEST/backupset/2018_03_10/o1_mf_nnndf_TAG20180310T025809_fb5z3bq9_.bkp tag=TAG20180310T025809 comment=NONE
+channel ORA_DISK_1: backup set complete, elapsed time: 00:01:56
+Finished backup at 10-MAR-18
+
+Starting Control File and SPFILE Autobackup at 10-MAR-18
+piece handle=/u01/app/oracle/fast_recovery_area/TESTDB/TEST/autobackup/2018_03_10/o1_mf_s_970369207_fb5z73g6_.bkp comment=NONE
+Finished Control File and SPFILE Autobackup at 10-MAR-18
+
+RMAN>
+
+Step 7: Move backup to RAC1 node with scp command.
+
+Step 8: Using rman to Duplicate database
+
+[oracle@rac1 ~]$ rman target sys/oracle@test auxiliary /
+
+Recovery Manager: Release 11.2.0.4.0 - Production on Sat Mar 10 03:00:31 2018
+
+Copyright (c) 1982, 2011, Oracle and/or its affiliates.  All rights reserved.
+
+connected to target database: TEST (DBID=2268489675)
+connected to auxiliary database: TESTDB (not mounted)
+
+RMAN> duplicate target database to testdb
+2> pfile=/u01/app/oracle/product/11.2.0/dbhome_1/dbs/inittestdb.ora
+logfile
+group 1 ('+DATA') SIZE 50M reuse,
+group 2 ('+DATA') SIZE 50M reuse;3> 4> 5>
+
+after finishing of duplicate db command in RMAN you will see output like following :
+
+
+contents of Memory Script:
+{
+   Alter clone database open resetlogs;
+}
+executing Memory Script
+
+database opened
+Finished Duplicate Db at 10-MAR-18
+
+RMAN>
+
+Step 9 :Check database converted to ASM :
+
+
+[oracle@rac1 ~]$ export ORACLE_SID=testdb
+[oracle@rac1 ~]$ sqlplus / as sysdba
+
+SQL*Plus: Release 11.2.0.4.0 Production on Sat Mar 10 03:12:30 2018
+
+Copyright (c) 1982, 2013, Oracle.  All rights reserved.
+
+
+Connected to:
+Oracle Database 11g Enterprise Edition Release 11.2.0.4.0 - 64bit Production
+With the Partitioning, Real Application Clusters, Automatic Storage Management, OLAP,
+Data Mining and Real Application Testing options
+
+SQL> select name,open_mode from v$database;
+
+NAME	  OPEN_MODE
+--------- --------------------
+TESTDB	  READ WRITE
+
+SQL> select name from v$datafile;
+
+NAME
+--------------------------------------------------------------------------------
++DATA/testdb/datafile/system.303.970369443
++DATA/testdb/datafile/sysaux.307.970369445
++DATA/testdb/datafile/undotbs1.306.970369445
++DATA/testdb/datafile/users.305.970369445
+
+
+
