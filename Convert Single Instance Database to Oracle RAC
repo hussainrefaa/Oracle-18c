@@ -1,0 +1,254 @@
+Prerequisites:
+
+we already have single instance ASM database up and running.
+we have already have second node with ASM running.
+
+Step 1 : Check details of Single Instance  ASM database :
+
+[oracle@rac1 ~]$ export ORACLE_SID=testdb
+[oracle@rac1 ~]$ sqlplus / as sysdba
+
+SQL*Plus: Release 11.2.0.4.0 Production on Sat Mar 10 03:12:30 2018
+
+Copyright (c) 1982, 2013, Oracle.  All rights reserved.
+
+
+Connected to:
+Oracle Database 11g Enterprise Edition Release 11.2.0.4.0 - 64bit Production
+With the Partitioning, Real Application Clusters, Automatic Storage Management, OLAP,
+Data Mining and Real Application Testing options
+
+SQL> select name,open_mode from v$database;
+
+NAME	  OPEN_MODE
+--------- --------------------
+TESTDB	  READ WRITE
+
+SQL> select name from v$datafile;
+
+NAME
+--------------------------------------------------------------------------------
++DATA/testdb/datafile/system.303.970369443
++DATA/testdb/datafile/sysaux.307.970369445
++DATA/testdb/datafile/undotbs1.306.970369445
++DATA/testdb/datafile/users.305.970369445
+
+Step 2 : Add redo and undo for second node
+
+
+SQL> alter database add logfile thread 2 group 3 ('+DATA') size 50m reuse;
+
+Database altered.
+
+SQL> alter database add logfile thread 2 group 4 ('+DATA') size 50m reuse;
+
+Database altered.
+
+SQL> alter database enable public thread 2;
+
+Database altered.
+
+SQL> create undo tablespace UNDOTBS2 datafile  '+DATA' size 500M;
+
+Tablespace created.
+
+Step 3: Add cluster related parameter
+
+We need to set cluster_database =true
+some more cluster related parameters as shown below
+Optionally, check controlfile parameter created with OMF and set that in parameter file.
+
+SQL> show parameter control_files
+
+NAME				     TYPE	 VALUE
+------------------------------------ ----------- ------------------------------
+control_files			     string	 +DATA/testdb/controlfile/curre
+						 nt.309.970369389
+SQL>
+
+*.cluster_database_instances=2
+*.cluster_database=true
+*.remote_listener='rac-scan:1521'
+testdb1.instance_number=1
+testdb2.instance_number=2
+testdb1.thread=1
+testdb2.thread=2
+testdb1.undo_tablespace='UNDOTBS1'
+testdb2.undo_tablespace='UNDOTBS2'
+*.control_files='+DATA/testdb/controlfile/current.309.970369389'
+
+Step 4: Change init file names from inittestdb.ora to inittestdb1.ora and inittestdb2.ora
+
+
+
+[oracle@rac1 dbs]$ cp inittestdb.ora inittestdb1.ora 
+[oracle@rac1 dbs]$ mv inittestdb.ora inittestdb2.ora 
+[oracle@rac1 dbs]$
+
+Step 5 : Shutdown database
+
+
+
+SQL> shutdown immediate
+Database closed.
+Database dismounted.
+ORACLE instance shut down.
+SQL>
+
+Step 6 : Start database on RAC1 node with new pfile
+
+
+
+[oracle@rac1 ~]$ export ORACLE_SID=testdb1
+[oracle@rac1 ~]$ orapwd file=$ORACLE_HOME/dbs/orapwtestdb1 password=oracle
+[oracle@rac1 ~]$ sqlplus / as sysdba
+
+SQL*Plus: Release 11.2.0.4.0 Production on Sat Mar 10 03:23:46 2018
+
+Copyright (c) 1982, 2013, Oracle.  All rights reserved.
+
+Connected to an idle instance.
+
+SQL> startup pfile='inittestdb1.ora';
+ORA-32004: obsolete or deprecated parameter(s) specified for RDBMS instance
+ORACLE instance started.
+
+Total System Global Area  392495104 bytes
+Fixed Size		    2253584 bytes
+Variable Size		  192941296 bytes
+Database Buffers	  192937984 bytes
+Redo Buffers		    4362240 bytes
+Database mounted.
+Database opened.
+SQL> 
+SQL> select name,open_mode ,instance_name from v$database,v$instance;
+
+NAME	  OPEN_MODE	       INSTANCE_NAME
+--------- -------------------- ----------------
+TESTDB	  READ WRITE	       testdb1
+
+SQL> Shut immedaite
+
+Here we can check database name as TESTDB and instance_name as testdb1.
+
+
+Step 7 :Now transfer inittestdb2.ora file to rac2 node
+
+
+[oracle@rac1 dbs]$ scp inittestdb2.ora rac2:/u01/app/oracle/product/11.2.0/dbhome_1/dbs/
+inittestdb2.ora
+
+Step 8: Start database on RAC2 node
+
+
+[oracle@rac2 ~]$ export ORACLE_SID=testdb2
+[oracle@rac12 ~]$ orapwd file=$ORACLE_HOME/dbs/orapwtestdb2 password=oracle
+[oracle@rac2 ~]$ sqlplus / as sysdba
+
+SQL*Plus: Release 11.2.0.4.0 Production on Sat Mar 10 03:37:48 2018
+
+Copyright (c) 1982, 2013, Oracle.  All rights reserved.
+
+Connected to an idle instance.
+
+SQL> startup
+ORA-32004: obsolete or deprecated parameter(s) specified for RDBMS instance
+ORACLE instance started.
+
+Total System Global Area  392495104 bytes
+Fixed Size		    2253584 bytes
+Variable Size		  192941296 bytes
+Database Buffers	  192937984 bytes
+Redo Buffers		    4362240 bytes
+Database mounted.
+Database opened.
+SQL> select name,open_mode,instance_name from v$database,v$instance;
+
+NAME	  OPEN_MODE	       INSTANCE_NAME
+--------- -------------------- ----------------
+TESTDB	  READ WRITE	       testdb2
+
+SQL> Shut immedaite
+
+Step 9 : Register the database instances with CRS framework using following command:
+
+
+[oracle@rac1 ~]$ srvctl add database -d testdb -o /u01/app/oracle/product/11.2.0/dbhome_1/
+[oracle@rac1 ~]$ srvctl add instance -d testdb -i testdb1 -n rac1
+[oracle@rac1 ~]$ srvctl add instance -d testdb -i testdb2 -n rac2
+
+Step 10 : stop and start database using srvctl :
+
+[oracle@rac1 ~]$ srvctl stop database -d testdb
+PRCC-1016 : testdb was already stopped
+[oracle@rac1 ~]$  srvctl start database -d testdb
+[oracle@rac1 ~]$
+
+Check the status of all instances converted RAC database:
+
+
+SQL> select * from v$active_instances;
+
+INST_NUMBER INST_NAME
+----------- ------------------------------------------------------------
+	  1 rac1.localdomain:testdb1
+	  2 rac2.localdomain:testdb2
+    
+Check status of cluster resources :
+
+[oracle@rac1 ~]$ crsctl status resource -t
+--------------------------------------------------------------------------------
+NAME           TARGET  STATE        SERVER                   STATE_DETAILS       
+--------------------------------------------------------------------------------
+Local Resources
+--------------------------------------------------------------------------------
+ora.DATA.dg
+               ONLINE  ONLINE       rac1                                         
+               ONLINE  ONLINE       rac2                                         
+ora.LISTENER.lsnr
+               ONLINE  ONLINE       rac1                                         
+               ONLINE  OFFLINE      rac2                                         
+ora.asm
+               ONLINE  ONLINE       rac1                     Started             
+               ONLINE  ONLINE       rac2                     Started             
+ora.gsd
+               OFFLINE OFFLINE      rac1                                         
+               OFFLINE OFFLINE      rac2                                         
+ora.net1.network
+               ONLINE  ONLINE       rac1                                         
+               ONLINE  ONLINE       rac2                                         
+ora.ons
+               ONLINE  ONLINE       rac1                                         
+               ONLINE  ONLINE       rac2                                         
+--------------------------------------------------------------------------------
+Cluster Resources
+--------------------------------------------------------------------------------
+ora.LISTENER_SCAN1.lsnr
+      1        ONLINE  ONLINE       rac1                                         
+ora.LISTENER_SCAN2.lsnr
+      1        ONLINE  ONLINE       rac1                                         
+ora.LISTENER_SCAN3.lsnr
+      1        ONLINE  ONLINE       rac1                                         
+ora.cvu
+      1        ONLINE  ONLINE       rac1                                         
+ora.oc4j
+      1        ONLINE  ONLINE       rac1                                         
+ora.orcl.db
+      1        ONLINE  ONLINE       rac1                     Open                
+      2        ONLINE  ONLINE       rac2                     Open                
+ora.orcl.myservice.svc
+      1        ONLINE  ONLINE       rac1                                         
+ora.rac1.vip
+      1        ONLINE  ONLINE       rac1                                         
+ora.rac2.vip
+      1        ONLINE  OFFLINE                                                   
+ora.scan1.vip
+      1        ONLINE  ONLINE       rac1                                         
+ora.scan2.vip
+      1        ONLINE  ONLINE       rac1                                         
+ora.scan3.vip
+      1        ONLINE  ONLINE       rac1                                                       
+ora.testdb.db
+      1        ONLINE  ONLINE       rac1                     Open                
+      2        ONLINE  ONLINE       rac2                     Open                
+[oracle@rac1 ~]$
