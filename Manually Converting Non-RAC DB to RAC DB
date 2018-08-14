@@ -1,0 +1,188 @@
+Step 1: Check details of Single Instance Database :
+
+Step 2 : Take backup of database :
+
+
+RMAN> backup database;
+ 
+Starting backup at 26-MAR-18
+allocated channel: ORA_DISK_1
+channel ORA_DISK_1: SID=34 device type=DISK
+channel ORA_DISK_1: starting full datafile backup set
+channel ORA_DISK_1: specifying datafile(s) in backup set
+input datafile file number=00001 name=/u01/oracle/oradata/mgr/system01.dbf
+input datafile file number=00002 name=/u01/oracle/oradata/mgr/sysaux01.dbf
+input datafile file number=00003 name=/u01/oracle/oradata/mgr/undotbs01.dbf
+input datafile file number=00004 name=/u01/oracle/oradata/mgr/users01.dbf
+channel ORA_DISK_1: starting piece 1 at 26-MAR-18
+channel ORA_DISK_1: finished piece 1 at 26-MAR-18
+piece handle=/u01/oracle/fast_recovery_area/MGR/backupset/2018_03_26/o1_mf_nnndf_TAG20180326T181929_fckv2sxd_.bkp tag=TAG20180326T181929 comment=NONE
+channel ORA_DISK_1: backup set complete, elapsed time: 00:01:26
+Finished backup at 26-MAR-18
+ 
+Starting Control File and SPFILE Autobackup at 26-MAR-18
+piece handle=/u01/oracle/fast_recovery_area/MGR/autobackup/2018_03_26/o1_mf_s_971806856_fckv5jqw_.bkp comment=NONE
+Finished Control File and SPFILE Autobackup at 26-MAR-18
+ 
+RMAN>
+
+Step 3 : Make directory in RAC node for recovery area:
+
+[oracle@rac1 oracle]$ mkdir -p /u01/app/oracle/fast_recovery_area/MGR
+
+Step 4: Transfer backupset and autobackup to rac node.
+
+[oracle@localhost 2018_03_26]$ scp o1_mf_nnndf_TAG20180326T181929_fckv2sxd_.bkp 
+192.168.1.181:/u01/app/oracle/fast_recovery_area/MGR/
+The authenticity of host '192.168.1.181 (192.168.1.181)' can't be established.
+RSA key fingerprint is 2c:c5:7c:5f:7a:b6:66:c0:7c:38:ce:8d:35:b2:87:2f.
+Are you sure you want to continue connecting (yes/no)? yes
+Warning: Permanently added '192.168.1.181' (RSA) to the list of known hosts.
+oracle@192.168.1.181's password: 
+o1_mf_nnndf_TAG20180326T181929_fckv2sxd_.bkp                100% 1014MB  13.7MB/s   01:14    
+[oracle@localhost 2018_03_26]$ scp /u01/oracle/fast_recovery_area/MGR/autobackup/2018_03_26/
+o1_mf_s_971806856_fckv5jqw_.bkp 192.168.1.181:/u01/app/oracle/fast_recovery_area/MGR/
+oracle@192.168.1.181's password: 
+o1_mf_s_971806856_fckv5jqw_.bkp              100% 9600KB   9.4MB/s   00:01    
+[oracle@localhost 2018_03_26]$
+
+Step 5 : Transfer spfile to RAC1 node , make directories :
+
+[oracle@rac1 ~]$ mkdir -p /u01/oracle/admin/mgr/adump
+[oracle@rac1 ~]$ mkdir -p /u01/oracle/admin/mgr/dpdump
+[oracle@rac1 ~]$ mkdir -p /u01/oracle/admin/mgr/pfile
+[oracle@rac1 ~]$  mkdir -p /u01/oracle/fast_recovery_area/MGR
+[oracle@rac1 ~]$ mkdir -p /u01/oracle/admin/mgr/pfile
+[oracle@rac1 ~]$ mkdir -p /u01/arc/mgr
+
+[oracle@rac1 .ssh]$ rsync -azvrh --progress 192.168.1.10:/u01/oracle/product/11.2.0/db_1/dbs/spfilemgr.ora $ORACLE_HOME/dbs
+receiving incremental file list
+spfilemgr.ora
+       2.56K 100%    2.44MB/s    0:00:00 (xfer#1, to-check=0/1)
+ 
+sent 30 bytes  received 715 bytes  1.49K bytes/sec
+total size is 2.56K  speedup is 3.44
+
+Step 6 : Startup database in nomount stage,  Restore control file from autobackup :
+
+
+RMAN> startup nomount
+
+Oracle instance started
+
+Total System Global Area     392495104 bytes
+
+Fixed Size                     2253584 bytes
+Variable Size                176164080 bytes
+Database Buffers             209715200 bytes
+Redo Buffers                   4362240 bytes
+
+RMAN> restore controlfile from autobackup;
+
+Starting restore at 04-APR-18
+using target database control file instead of recovery catalog
+allocated channel: ORA_DISK_1
+channel ORA_DISK_1: SID=19 device type=DISK
+
+recovery area destination: /u01/oracle/fast_recovery_area
+database name (or database unique name) used for search: MGR
+channel ORA_DISK_1: AUTOBACKUP /u01/oracle/fast_recovery_area/MGR/autobackup/2018_03_26/o1_mf_s_971806856_fckv5jqw_.bkp found in the recovery area
+AUTOBACKUP search with format "%F" not attempted because DBID was not set
+channel ORA_DISK_1: restoring control file from AUTOBACKUP /u01/oracle/fast_recovery_area/MGR/autobackup/2018_03_26/o1_mf_s_971806856_fckv5jqw_.bkp
+channel ORA_DISK_1: control file restore from AUTOBACKUP complete
+output file name=/u01/oracle/oradata/mgr/control01.ctl
+output file name=/u01/oracle/oradata/mgr/control02.ctl
+Finished restore at 04-APR-18
+
+RMAN> alter database mount;
+
+database mounted
+released channel: ORA_DISK_1
+
+Step 7 : Catalog backup files :
+
+
+RMAN> catalog start with '/u01/app/oracle/fast_recovery_area/MGR/';
+
+Starting implicit crosscheck backup at 04-APR-18
+allocated channel: ORA_DISK_1
+channel ORA_DISK_1: SID=19 device type=DISK
+Crosschecked 1 objects
+Finished implicit crosscheck backup at 04-APR-18
+
+Starting implicit crosscheck copy at 04-APR-18
+using channel ORA_DISK_1
+Finished implicit crosscheck copy at 04-APR-18
+
+searching for all files in the recovery area
+cataloging files...
+no files cataloged
+
+searching for all files that match the pattern /u01/app/oracle/fast_recovery_area/MGR/
+
+List of Files Unknown to the Database
+=====================================
+File Name: /u01/app/oracle/fast_recovery_area/MGR/o1_mf_s_971806856_fckv5jqw_.bkp
+File Name: /u01/app/oracle/fast_recovery_area/MGR/o1_mf_nnndf_TAG20180326T181929_fckv2sxd_.bkp
+
+Do you really want to catalog the above files (enter YES or NO)? YES
+cataloging files...
+cataloging done
+
+List of Cataloged Files
+=======================
+File Name: /u01/app/oracle/fast_recovery_area/MGR/o1_mf_s_971806856_fckv5jqw_.bkp
+File Name: /u01/app/oracle/fast_recovery_area/MGR/o1_mf_nnndf_TAG20180326T181929_fckv2sxd_.bkp
+
+Step 8 : Restore database ;
+
+
+
+RMAN> restore database;
+
+Starting restore at 04-APR-18
+using channel ORA_DISK_1
+
+channel ORA_DISK_1: starting datafile backup set restore
+channel ORA_DISK_1: specifying datafile(s) to restore from backup set
+channel ORA_DISK_1: restoring datafile 00001 to /u01/oracle/oradata/mgr/system01.dbf
+channel ORA_DISK_1: restoring datafile 00002 to /u01/oracle/oradata/mgr/sysaux01.dbf
+channel ORA_DISK_1: restoring datafile 00003 to /u01/oracle/oradata/mgr/undotbs01.dbf
+channel ORA_DISK_1: restoring datafile 00004 to /u01/oracle/oradata/mgr/users01.dbf
+channel ORA_DISK_1: reading from backup piece /u01/app/oracle/fast_recovery_area/MGR/o1_mf_nnndf_TAG20180326T181929_fckv2sxd_.bkp
+channel ORA_DISK_1: piece handle=/u01/app/oracle/fast_recovery_area/MGR/o1_mf_nnndf_TAG20180326T181929_fckv2sxd_.bkp tag=TAG20180326T181929
+channel ORA_DISK_1: restored backup piece 1
+channel ORA_DISK_1: restore complete, elapsed time: 00:01:06
+Finished restore at 04-APR-18
+
+RMAN>
+
+Step 9 : Recover database :
+
+RMAN> restore database;
+
+Starting restore at 04-APR-18
+using channel ORA_DISK_1
+
+channel ORA_DISK_1: starting datafile backup set restore
+channel ORA_DISK_1: specifying datafile(s) to restore from backup set
+channel ORA_DISK_1: restoring datafile 00001 to /u01/oracle/oradata/mgr/system01.dbf
+channel ORA_DISK_1: restoring datafile 00002 to /u01/oracle/oradata/mgr/sysaux01.dbf
+channel ORA_DISK_1: restoring datafile 00003 to /u01/oracle/oradata/mgr/undotbs01.dbf
+channel ORA_DISK_1: restoring datafile 00004 to /u01/oracle/oradata/mgr/users01.dbf
+channel ORA_DISK_1: reading from backup piece /u01/app/oracle/fast_recovery_area/MGR/o1_mf_nnndf_TAG20180326T181929_fckv2sxd_.bkp
+channel ORA_DISK_1: piece handle=/u01/app/oracle/fast_recovery_area/MGR/o1_mf_nnndf_TAG20180326T181929_fckv2sxd_.bkp tag=TAG20180326T181929
+channel ORA_DISK_1: restored backup piece 1
+channel ORA_DISK_1: restore complete, elapsed time: 00:01:06
+Finished restore at 04-APR-18
+
+RMAN>
+
+Step 10 : Open database using “open resetlogs” option .
+
+
+RMAN> alter database open resetlogs;
+
+database opened
+
+RMAN>
