@@ -1,0 +1,21 @@
+Let’s have look on the query which we use to monitor main elements of Oracle Database CDRs.
+
+— MAXDATAFILES
+
+Select ‘MAXDATAFILES ‘ || records_total from v$controlfile_record_section where type = ‘DATAFILE’;
+
+— MAXLOGHISTORY
+
+Select ‘MAXLOGHISTORY ‘ || records_total from v$controlfile_record_section where type = ‘LOG HISTORY’;
+
+— MAXINSTANCES
+
+Select ‘MAXINSTANCES ‘ || records_total from v$controlfile_record_section where type = ‘DATABASE’;
+
+— MAXLOGFILES
+
+Select ‘ MAXLOGFILES ‘ || records_total from v$controlfile_record_section where type = ‘REDO LOG’;
+
+— MAXLOGMEMBERS
+
+Select ‘MAXLOGMEMBERS ‘ || dimlm from x$kccdi;
