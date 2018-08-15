@@ -1,0 +1,28 @@
+
+-- Author: 	Hussain refaa
+-- creation Date: 	2018
+-- Last Updated: 	0000-00-00
+-- Control Number:	xxxx-xxxx-xxxx-xxxx
+-- Version: 	0.0
+-- Phone : +4915775148443
+-- Email: refaa.hussain@gmail.com
+
+Step 1: Checking Database role as we are applying this on a physical standby database.
+
+SQL> select name,open_mode,database_role,db_unique_name from v$database;
+
+NAME	  OPEN_MODE	       DATABASE_ROLE	DB_UNIQUE_NAME
+--------- -------------------- ---------------- ------------------------------
+MGR	  READ ONLY WITH APPLY PHYSICAL STANDBY std_mgr
+
+Step 2: Check if  block change tracking is enabled or not
+
+
+SQL> select * from v$block_change_tracking;
+
+STATUS	   FILENAME		     BYTES
+---------- -------------------- ----------
+DISABLED
+
+Step 3: Check if OMF is enabled or not.
+
