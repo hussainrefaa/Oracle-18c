@@ -1,0 +1,134 @@
+Backup and recovery is a common task in DBA’s Daily Routine. 
+Let’s have looked over the process to take backup of Oracle database and know about the process to recover the database.
+Check the archive log statu
+
+SQL> archive log list;
+
+Database log mode Archive Mode
+
+Automatic archival Enabled
+
+Archive destination USE_DB_RECOVERY_FILE_DEST
+
+Oldest online log sequence 17
+
+Next log sequence to archive 19
+
+Current log sequence 19
+
+Create a dummy table for testing
+
+SQL> create table test(name varchar2(100));
+
+Table created.
+
+SQL> insert into b values(‘**** INSERT BEFORE BACKUP *****’);
+
+1 row created.
+
+SQL> commit;
+
+Commit complete.
+
+Take a Backup
+
+D:\>set oracle_sid=orcl
+
+D:\>rman
+
+RMAN> connect target sys/sys
+
+connected to target database: ORCL (DBID=847839442)
+
+RMAN> run{
+
+allocate channel c1 type disk;
+
+allocate channel c2 type disk;
+
+allocate channel c3 type disk;
+
+allocate channel c4 type disk;
+
+backup database;
+
+}
+
+Insert more rows and Shutdown the database
+
+
+
+SQL> insert into b values(‘**** INSERT AFTER BACKUP *****’);
+
+1 row created.
+
+SQL> commit;
+
+Commit complete.
+
+SQL> shutdown immediate;
+
+Database closed.
+
+Database dismounted.
+
+ORACLE instance shut down.
+
+Delete USERS.DBF/SYSTEM.DBF at OS level and try to start the database
+
+
+
+SQL> startup;
+
+ORACLE instance started.
+
+Total System Global Area 167772160 bytes
+
+Fixed Size 1247876 bytes
+
+Variable Size 71304572 bytes
+
+Database Buffers 88080384 bytes
+
+Redo Buffers 7139328 bytes
+
+Database mounted.
+
+ORA-01157: cannot identify/lock data file 1 – see DBWR trace file
+
+ORA-01110: data file 1: ‘C:\ORACLE\PRODUCT\10.2.0\ORADATA\DBA20\SYSTEM01.DBF’
+
+Now we need to recover the database.
+
+
+
+RMAN> run
+
+{
+
+allocate channel c1 type disk;
+
+allocate channel c2 type disk;
+
+allocate channel c3 type disk;
+
+restore database;
+
+recover database;
+
+}
+
+SQL> alter database open;
+
+Database altered.
+
+SQL> select * from test;
+
+NAME
+
+—————————————–
+
+**** INSERT BEFORE BACKUP *****
+
+**** INSERT AFTER BACKUP *****
+
