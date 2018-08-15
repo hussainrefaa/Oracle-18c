@@ -23,6 +23,4 @@ SQL> exec DBMS_SHARED_POOL.PURGE ('00000005ODJD9BC0,247122679','C');
 
 PL/SQL procedure successfully completed.
 
-SQL> exec DBMS_SHARED_POOL.PURGE ('00000005ODJD9BC0,247122679','C');
- 
-PL/SQL procedure successfully completed.
+
